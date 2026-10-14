@@ -599,7 +599,12 @@
   function renderSidebar() {
     var html = '<button class="btn3d nav' + (view.type === "all" ? " is-active" : "") + '" data-go="all">' +
       '<span class="nav__name">' + t("republic") + "</span><b>" + T.regions.length + "</b></button>";
-    T.regions.forEach(function (r, ri) {
+    var rank = { done: 0, scheduled: 1, none: 2 };
+    var order = T.regions.map(function (r, ri) { return ri; }).sort(function (x, y) {
+      return rank[regionStatus(T.regions[x])] - rank[regionStatus(T.regions[y])] || x - y;
+    });
+    order.forEach(function (ri) {
+      var r = T.regions[ri];
       var active = view.type === "region" && view.r === ri;
       var st = regionStatus(r);
       var info = r.districts ? aggregate(r.districts).done + "/" + r.districts.length : "—";

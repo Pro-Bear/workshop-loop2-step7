@@ -574,26 +574,35 @@ svg { flex: none; }
 }
 
 @media (max-width: 860px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
+  .app { display: block; }
   .sidebar {
-    position: static; height: auto;
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 46;
+    width: min(86vw, 330px); height: 100dvh;
+    padding-top: max(18px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
     padding-left: max(16px, env(safe-area-inset-left, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    transform: translateX(-105%);
+    transition: transform .3s cubic-bezier(.2, .7, .2, 1);
+    box-shadow: 20px 0 40px rgba(0, 0, 0, .3);
   }
-  .regions { flex-direction: row; overflow-x: auto; overflow-y: visible; padding-bottom: 14px; }
-  .nav { width: auto; flex: none; max-width: 260px; }
-  .legend { flex-direction: row; flex-wrap: wrap; gap: 6px 14px; }
+  body.drawer-open .sidebar { transform: none; }
+  body.drawer-open .scrim { display: block; }
+  body.drawer-open { overflow: hidden; }
   .main {
-    padding-top: 16px; padding-bottom: 16px;
+    padding-top: 14px; padding-bottom: 20px;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px));
+    gap: 16px;
   }
-  .topbar { flex-direction: column; align-items: flex-start; }
+  .main-body { gap: 16px; }
+  .topbar { flex-direction: column; align-items: flex-start; padding: 16px 18px; }
+  .topbar__title { font-size: 22px; }
   .datebox { text-align: left; }
   .stages { grid-template-columns: 1fr; gap: 16px; }
   .stage::after { display: none; }
   .stage { flex-direction: row; gap: 14px; }
-  .sbar, .hbar { grid-template-columns: minmax(90px, 120px) minmax(0, 1fr) 44px; gap: 8px; }
+  .sbar, .hbar { grid-template-columns: minmax(90px, 130px) minmax(0, 1fr) 44px; gap: 8px; }
+  .panel { padding: 16px; }
 }
 
 @media (max-width: 600px) {
@@ -722,12 +731,55 @@ body.modal-open { overflow: hidden; }
 .btn-primary:disabled { opacity: .6; cursor: wait; }
 .btn-small { padding: 9px 14px; font-size: 13px; font-weight: 500; }
 
-@media (max-width: 860px) {
-  .brand { flex-direction: row; align-items: center; }
-  .brand__logo img { width: 104px; }
-  .toprow { flex-wrap: wrap; }
-  .tools { margin-left: 0; }
+/* ---------- mobil sarlavha va yon menyu ---------- */
+
+.mbar {
+  display: none;
+  position: sticky; top: 0; z-index: 30;
+  align-items: center; gap: 12px;
+  padding: max(10px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  background: var(--side); color: #fff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+}
+.mbar__menu {
+  --edge: var(--key-side-edge);
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0;
+  background: var(--key-side); color: #fff;
+}
+.mbar__menu svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.mbar__logo { display: block; padding: 0; border: 0; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.mbar__logo img { display: block; width: 96px; height: auto; }
+.mbar__logo.is-tapped { animation: logoTap .3s ease; }
+.mbar__title { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; text-align: right; }
+.scrim { display: none; position: fixed; inset: 0; z-index: 45; background: rgba(6, 12, 26, .5); backdrop-filter: blur(2px); animation: fadeIn .2s ease; }
+.sidebar__close { display: none; }
+
+/* planshet: tor yon panel */
+@media (min-width: 861px) and (max-width: 1180px) {
+  .app { grid-template-columns: 250px minmax(0, 1fr); }
+  .sidebar { padding: 18px 12px; }
+  .brand__logo img { width: 112px; }
+  .nav { padding: 10px; font-size: 13px; }
+  .main { padding: 18px 20px 22px; gap: 18px; }
   .tool span { display: none; }
+  .topbar__title { font-size: 23px; }
+  .card { padding: 16px; }
+  .card__value { font-size: 28px; }
+}
+
+@media (max-width: 860px) {
+  .mbar { display: flex; }
+  .sidebar__close { display: grid; position: absolute; top: max(14px, env(safe-area-inset-top, 0px)); right: 12px; }
+  .brand { padding-right: 52px; }
+  .toprow { flex-wrap: wrap; gap: 10px; }
+  .tools { margin-left: auto; }
+  .tool span { display: none; }
+  .tool { padding: 8px 10px; }
+  .lang { padding: 8px 10px; }
+}
+@media (max-width: 420px) {
+  .toprow #back { flex-basis: 100%; }
+  .tools { margin-left: 0; }
 }
 @media (max-width: 520px) {
   .adm__row, .adm__scores { grid-template-columns: 1fr; }

@@ -827,6 +827,7 @@
     if (view.type === "region") renderRegion(view.r, view.d);
     else renderAll();
     renderSidebar();
+    $("mbar-title").textContent = $("title").textContent;
     $("foot").textContent = t("foot", fmtDate(T.asOf));
     startGallery();
     if (animate) playEntrance();
@@ -895,15 +896,34 @@
   // ---------- logotip: 5 marta bosilsa admin panel ----------
 
   var taps = [];
-  $("logo").addEventListener("click", function () {
-    var now = Date.now();
-    taps = taps.filter(function (x) { return now - x < 2500; });
-    taps.push(now);
-    var logo = $("logo");
-    logo.classList.remove("is-tapped");
-    void logo.offsetWidth;
-    logo.classList.add("is-tapped");
-    if (taps.length >= 5) { taps = []; openAdmin(); }
+  document.querySelectorAll("[data-logo]").forEach(function (logo) {
+    logo.addEventListener("click", function () {
+      var now = Date.now();
+      taps = taps.filter(function (x) { return now - x < 2500; });
+      taps.push(now);
+      logo.classList.remove("is-tapped");
+      void logo.offsetWidth;
+      logo.classList.add("is-tapped");
+      if (taps.length >= 5) { taps = []; setDrawer(false); openAdmin(); }
+    });
+  });
+
+  // ---------- mobil yon menyu ----------
+
+  function setDrawer(open) {
+    document.body.classList.toggle("drawer-open", open);
+    $("menu-btn").setAttribute("aria-expanded", String(open));
+  }
+  $("menu-btn").addEventListener("click", function () { setDrawer(!document.body.classList.contains("drawer-open")); });
+  $("scrim").addEventListener("click", function () { setDrawer(false); });
+  $("drawer-close").addEventListener("click", function () { setDrawer(false); });
+  $("regions").addEventListener("click", function (e) { if (e.target.closest("[data-go]")) setDrawer(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") setDrawer(false); });
+  var sx = null;
+  $("sidebar").addEventListener("touchstart", function (e) { sx = e.touches[0].clientX; }, { passive: true });
+  $("sidebar").addEventListener("touchend", function (e) {
+    if (sx != null && e.changedTouches[0].clientX - sx < -60) setDrawer(false);
+    sx = null;
   });
 
   // ---------- admin panel ----------

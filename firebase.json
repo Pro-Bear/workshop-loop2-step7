@@ -1,0 +1,25 @@
+{
+  "hosting": {
+    "site": "hududlar-jarayon",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firestore.rules",
+      ".firebaserc",
+      "**/.*",
+      "design/**",
+      "img/avatar*.jpg",
+      "img/background.jpg",
+      "img/file.svg",
+      "img/menu.svg",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      { "source": "**/*.@(js|css|html)", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+      { "source": "img/**", "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }] }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

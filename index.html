@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>Zamonaviy kasblar — monitoring</title>
-  <link href="https://fonts.googleapis.com/css?family=Roboto:100,400,500,700" rel="stylesheet">
+  <title>Zamonaviy kasblar monitoringi</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -18,8 +18,7 @@
           <div class="brand__sub">Hududlar monitoringi</div>
         </div>
       </div>
-      <input class="search" id="search" type="search" placeholder="Hududni qidirish…" autocomplete="off">
-      <nav class="regions" id="regions" aria-label="Hududlar"></nav>
+      <nav class="regions" id="regions" aria-label="Viloyatlar"></nav>
       <div class="legend">
         <span><i class="dot dot--done"></i>O'tkazildi</span>
         <span><i class="dot dot--partial"></i>Faqat g'oliblar ro'yxati</span>
@@ -28,8 +27,9 @@
     </aside>
 
     <main class="main">
+      <div id="back"></div>
       <header class="topbar">
-        <div>
+        <div class="topbar__text">
           <div class="topbar__crumb" id="crumb"></div>
           <h1 class="topbar__title" id="title"></h1>
         </div>
@@ -41,8 +41,7 @@
 
       <section class="status" id="status"></section>
       <section class="cards" id="cards"></section>
-      <section class="panel" id="progress"></section>
-      <section class="panel" id="breakdown"></section>
+      <div class="main-body" id="main-body"></div>
 
       <footer class="foot" id="foot"></footer>
     </main>

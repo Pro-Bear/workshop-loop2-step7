@@ -335,3 +335,105 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .btn3d, .ring__fg { transition: none; }
 }
+
+/* ---------- qo'shimchalar: yo'nalish ishtirokchilari, surat belgisi ---------- */
+
+.major__sub { font-size: 13px; color: var(--muted); margin-top: -4px; }
+.major__sub b { color: var(--text); font-variant-numeric: tabular-nums; }
+.major > .major__name + .major__sub { margin-top: -6px; }
+
+.tile__photo {
+  margin-left: auto; flex: none;
+  font-size: 11px; font-weight: 500;
+  padding: 2px 7px; border-radius: 999px;
+  color: var(--blue); background: var(--chip-blue);
+}
+
+.panel__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.panel__head .panel__title { margin: 0; }
+
+/* ---------- suratlar karuseli ---------- */
+
+.gallery {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0b1324;
+  box-shadow: 0 10px 30px rgba(10, 22, 48, .18);
+  outline: none;
+}
+.gallery:focus-visible { box-shadow: 0 0 0 3px var(--blue), 0 10px 30px rgba(10, 22, 48, .18); }
+.gallery__viewport { overflow: hidden; }
+.gallery__track { display: flex; transition: transform .7s cubic-bezier(.22, .7, .2, 1); }
+.gallery__slide { position: relative; flex: 0 0 100%; margin: 0; aspect-ratio: 16 / 9; max-height: 520px; width: 100%; }
+.gallery__slide img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.gallery__slide figcaption {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 48px 22px 24px;
+  color: #fff; font-size: 16px; font-weight: 500;
+  background: linear-gradient(to top, rgba(6, 12, 26, .85), rgba(6, 12, 26, 0));
+  display: flex; flex-direction: column; gap: 4px;
+}
+.gallery__place { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a9c2ff; }
+
+.gallery__nav {
+  --edge: #c9d1e0;
+  position: absolute; top: 50%;
+  width: 44px; height: 44px; margin-top: -26px;
+  display: grid; place-items: center;
+  font-size: 26px; line-height: 1; font-weight: 700;
+  color: #16213a; background: #fff;
+  text-align: center;
+  opacity: .92;
+}
+.gallery__nav--prev { left: 14px; }
+.gallery__nav--next { right: 14px; }
+
+.gallery__count {
+  position: absolute; top: 14px; right: 14px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums;
+  color: #fff; background: rgba(6, 12, 26, .55);
+  backdrop-filter: blur(4px);
+}
+
+.gallery__progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, .15); }
+.gallery__progress span { display: block; height: 100%; width: 0; background: var(--blue); }
+.gallery__progress span.is-running { animation: galProgress 5s linear forwards; }
+.gallery.is-paused .gallery__progress span { animation-play-state: paused; }
+@keyframes galProgress { from { width: 0; } to { width: 100%; } }
+
+.gallery__dots { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.gallery__dot {
+  width: 9px; height: 9px; padding: 0; border: 0; border-radius: 999px;
+  background: var(--line); cursor: pointer;
+  transition: width .3s, background .3s;
+}
+.gallery__dot.is-active { width: 26px; background: var(--blue); }
+.gallery__dot:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.gallery__links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 16px; font-size: 13px; }
+.gallery__links a { color: var(--blue); text-decoration: none; word-break: break-all; }
+.gallery__links a:hover { text-decoration: underline; }
+
+@media (max-width: 600px) {
+  .gallery__slide figcaption { padding: 36px 14px 16px; font-size: 14px; }
+  .gallery__nav { width: 36px; height: 36px; font-size: 22px; margin-top: -22px; }
+  .gallery__nav--prev { left: 8px; }
+  .gallery__nav--next { right: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery__track, .gallery__dot { transition: none; }
+}
+
+/* tik suratlar: to'liq ko'rinadi, orqa fon xiralashtiriladi */
+.gallery__backdrop {
+  position: absolute; inset: -20px;
+  background-size: cover; background-position: center;
+  filter: blur(22px) brightness(.55);
+  display: none;
+}
+.gallery__slide { overflow: hidden; }
+.gallery__slide.is-portrait .gallery__backdrop { display: block; }
+.gallery__slide.is-portrait img { position: relative; object-fit: contain; }

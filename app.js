@@ -10,7 +10,10 @@
 
   function places(d, key) {
     if (d.ages) return d.ages[key] != null ? [{ s: null, a: d.ages[key] }] : [];
-    return (d[key] || []).map(function (s) { return { s: s }; });
+    var scale = d.scale || 100;
+    return (d[key] || []).map(function (s) {
+      return { s: s, scale: scale, pct: s == null ? null : s / scale * 100 };
+    });
   }
 
   function slotsPerMajor(d) { return d.ages ? 1 : 3; }
@@ -22,7 +25,7 @@
   }
 
   function status(d) {
-    if (d.date) return "done";
+    if (d.date || d.participated != null) return "done";
     if (d.ages && filled(d) > 0) return "partial";
     return "none";
   }
@@ -48,6 +51,11 @@
     return sum / list.length;
   }
 
+  function winnerAges(d) {
+    if (d.winnerAges) return d.winnerAges;
+    return d.ages ? Object.keys(d.ages).map(function (k) { return d.ages[k]; }) : [];
+  }
+
   function aggregate(districts) {
     var a = { total: districts.length, held: 0, participated: 0, absent: 0, reported: 0,
       ages: [], dates: [], levels: [] };
@@ -58,7 +66,7 @@
         a.absent += d.absent || 0;
         a.reported++;
       }
-      if (d.ages) Object.keys(d.ages).forEach(function (k) { a.ages.push(d.ages[k]); });
+      a.ages = a.ages.concat(winnerAges(d));
       if (d.date) a.dates.push(d.date);
       a.levels.push(level(d));
     });
@@ -68,16 +76,19 @@
   }
 
   function majorStats(districts, key) {
-    var scores = [], winners = 0, firsts = 0;
+    var scores = [], winners = 0, firsts = 0, people = 0, reporting = 0;
     districts.forEach(function (d) {
       var p = places(d, key);
       winners += p.length;
       if (p.length) firsts++;
-      p.forEach(function (x) { if (x.s != null) scores.push(x.s); });
+      p.forEach(function (x) { if (x.pct != null) scores.push(Math.round(x.pct)); });
+      if (d.byMajor && d.byMajor[key] != null) { people += d.byMajor[key]; reporting++; }
     });
     return {
       winners: winners,
       firsts: firsts,
+      people: people,
+      reporting: reporting,
       avg: scores.length ? Math.round(avg(scores)) : null,
       max: scores.length ? Math.max.apply(null, scores) : null
     };
@@ -159,7 +170,8 @@
   function regionStatus(r) {
     if (!r.districts) return "none";
     var a = aggregate(r.districts);
-    return a.held ? (a.dates.length ? "done" : "partial") : "none";
+    if (!a.held) return "none";
+    return r.districts.some(function (d) { return status(d) === "done"; }) ? "done" : "partial";
   }
 
   function renderSidebar() {
@@ -173,6 +185,119 @@
     });
     $("regions").innerHTML = html;
   }
+
+  // ---------- suratlar galereyasi ----------
+
+  var gal = { timer: null, i: 0, n: 0, paused: false };
+  var GAL_DELAY = 5000;
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function regionPhotos(r) {
+    var out = [];
+    r.districts.forEach(function (d) {
+      (d.photos || []).forEach(function (ph) { out.push({ src: ph.src, caption: ph.caption, place: d.name }); });
+    });
+    return out;
+  }
+
+  function gallery(photos, links) {
+    if (!photos.length) return "";
+    var places = [];
+    photos.forEach(function (p) { if (places.indexOf(p.place) === -1) places.push(p.place); });
+    var slides = photos.map(function (p, i) {
+      return '<figure class="gallery__slide" aria-roledescription="slayd" aria-label="' + (i + 1) + " / " + photos.length + '">' +
+        '<span class="gallery__backdrop" style="background-image:url(\'' + esc(p.src) + '\')"></span>' +
+        '<img src="' + esc(p.src) + '" alt="' + esc(p.place + ": " + p.caption) + '" onload="this.parentNode.classList.toggle(\'is-portrait\', this.naturalHeight > this.naturalWidth * 0.8)">' +
+        '<figcaption><span class="gallery__place">' + esc(p.place) + "</span>" + esc(p.caption) + "</figcaption></figure>";
+    }).join("");
+    var many = photos.length > 1;
+    var dots = !many ? "" : photos.map(function (p, i) {
+      return '<button class="gallery__dot" data-gal="' + i + '" aria-label="' + (i + 1) + '-surat"></button>';
+    }).join("");
+    var linkHtml = links && links.length ? '<div class="gallery__links"><span class="muted">Tadbir yoritilishi:</span>' +
+      links.map(function (l) { return '<a href="' + esc(l) + '" target="_blank" rel="noopener">' + esc(l.replace(/^https?:\/\//, "")) + "</a>"; }).join("") +
+      "</div>" : "";
+    return '<section class="panel"><div class="panel__head"><h2 class="panel__title">Tadbirdan lavhalar</h2>' +
+      '<span class="muted">' + esc(places.join(", ")) + " · " + photos.length + " ta surat</span></div>" +
+      '<div class="gallery" id="gallery" aria-roledescription="karusel" tabindex="0">' +
+      '<div class="gallery__viewport"><div class="gallery__track" id="gal-track">' + slides + "</div></div>" +
+      (many ? '<button class="btn3d gallery__nav gallery__nav--prev" data-gal="prev" aria-label="Oldingi surat">&#8249;</button>' +
+      '<button class="btn3d gallery__nav gallery__nav--next" data-gal="next" aria-label="Keyingi surat">&#8250;</button>' : "") +
+      '<div class="gallery__count" id="gal-count"></div>' +
+      '<div class="gallery__progress"><span id="gal-bar"></span></div>' +
+      "</div>" + '<div class="gallery__dots">' + dots + "</div>" + linkHtml + "</section>";
+  }
+
+  function showSlide(i) {
+    var track = $("gal-track");
+    if (!track) return;
+    gal.i = (i + gal.n) % gal.n;
+    track.style.transform = "translateX(" + (-gal.i * 100) + "%)";
+    $("gal-count").textContent = (gal.i + 1) + " / " + gal.n;
+    document.querySelectorAll(".gallery__dot").forEach(function (d, k) {
+      d.classList.toggle("is-active", k === gal.i);
+      d.setAttribute("aria-current", k === gal.i ? "true" : "false");
+    });
+    var bar = $("gal-bar");
+    bar.classList.remove("is-running");
+    void bar.offsetWidth;
+    if (!gal.paused && !reduceMotion && gal.n > 1) bar.classList.add("is-running");
+    schedule();
+  }
+
+  function schedule() {
+    clearTimeout(gal.timer);
+    if (gal.paused || reduceMotion || gal.n < 2) return;
+    gal.timer = setTimeout(function () { showSlide(gal.i + 1); }, GAL_DELAY);
+  }
+
+  function setPaused(p) {
+    gal.paused = p;
+    var g = $("gallery");
+    if (g) g.classList.toggle("is-paused", p);
+    if (p) clearTimeout(gal.timer);
+    else showSlide(gal.i);
+  }
+
+  function startGallery() {
+    var g = $("gallery");
+    if (!g) return;
+    gal.n = g.querySelectorAll(".gallery__slide").length;
+    gal.paused = false;
+    showSlide(0);
+    g.addEventListener("mouseenter", function () { setPaused(true); });
+    g.addEventListener("mouseleave", function () { setPaused(false); });
+    g.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowLeft") showSlide(gal.i - 1);
+      if (e.key === "ArrowRight") showSlide(gal.i + 1);
+    });
+    var x0 = null;
+    g.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    g.addEventListener("touchend", function (e) {
+      if (x0 == null) return;
+      var dx = e.changedTouches[0].clientX - x0;
+      if (Math.abs(dx) > 40) showSlide(gal.i + (dx < 0 ? 1 : -1));
+      x0 = null;
+    });
+  }
+
+  function stopGallery() {
+    clearTimeout(gal.timer);
+    gal.n = 0;
+  }
+
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-gal]");
+    if (!b) return;
+    var v = b.dataset.gal;
+    showSlide(v === "prev" ? gal.i - 1 : v === "next" ? gal.i + 1 : +v);
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (!gal.n) return;
+    if (document.hidden) clearTimeout(gal.timer);
+    else if (!gal.paused) showSlide(gal.i);
+  });
 
   // ---------- ko'rinishlar ----------
 
@@ -206,7 +331,9 @@
     }).join("");
     $("main-body").innerHTML = '<section class="panel"><h2 class="panel__title">Hududlar kesimida</h2><div class="table-wrap">' +
       '<table class="table"><thead><tr><th>Hudud</th><th class="num">O\'tkazildi</th><th class="num">Ishtirokchilar</th>' +
-      '<th class="num">Jarayon</th></tr></thead><tbody>' + rows + "</tbody></table></div></section>";
+      '<th class="num">Jarayon</th></tr></thead><tbody>' + rows + "</tbody></table></div></section>" +
+      gallery([].concat.apply([], T.regions.filter(function (r) { return r.districts; }).map(regionPhotos)));
+    startGallery();
   }
 
   function renderRegion(ri) {
@@ -240,7 +367,8 @@
 
     var majors = T.majors.map(function (m) {
       var s = majorStats(r.districts, m.key);
-      return '<div class="major major--' + m.key + '"><div class="major__name">' + m.short + "</div>" +
+      var who = s.reporting ? '<div class="major__sub">Ishtirokchilar: <b>' + s.people + " nafar</b> (" + s.reporting + " tuman ma'lumoti)</div>" : "";
+      return '<div class="major major--' + m.key + '"><div class="major__name">' + m.short + "</div>" + who +
         '<dl class="major__stats">' +
         "<div><dt>G'oliblar</dt><dd>" + s.winners + "</dd></div>" +
         "<div><dt>Hududiy bosqichga</dt><dd>" + s.firsts + "</dd></div>" +
@@ -251,9 +379,10 @@
 
     var tiles = r.districts.map(function (d, di) {
       var st = status(d);
-      var meta = d.date ? fmtDate(d.date).replace(/ \d{4}$/, "") : st === "partial" ? "g'oliblar ro'yxati" : "ma'lumot yo'q";
+      var meta = d.date ? fmtDate(d.date).replace(/ \d{4}$/, "") : st === "partial" ? "g'oliblar ro'yxati" : st === "done" ? "o'tkazilgan" : "ma'lumot yo'q";
       return '<button class="btn3d tile tile--' + st + '" data-go="district:' + ri + ":" + di + '">' +
-        '<span class="tile__top"><i class="dot dot--' + st + '"></i><span class="tile__name">' + esc(d.name) + "</span></span>" +
+        '<span class="tile__top"><i class="dot dot--' + st + '"></i><span class="tile__name">' + esc(d.name) + "</span>" +
+        (d.photos ? '<span class="tile__photo" title="Suratlar bor">' + d.photos.length + " surat</span>" : "") + "</span>" +
         '<span class="tile__meta"><span>' + meta + "</span><b>" + (d.participated != null ? num(d.participated) + " nafar" : "") +
         "</b></span></button>";
     }).join("");
@@ -264,25 +393,28 @@
       '</b> ta tumandan ma\'lumot kutilmoqda<br><span class="muted">Tumanlar jarayon darajasining o\'rtachasi</span></div></div></section>' +
       '<section class="panel"><h2 class="panel__title">Yo\'nalishlar kesimida</h2><div class="majors">' + majors + "</div></section>" +
       '<section class="panel"><h2 class="panel__title">Tumanlar (shaharlar)<span class="muted"> — batafsil ko\'rish uchun bosing</span></h2>' +
-      '<div class="tiles">' + tiles + "</div></section>";
+      '<div class="tiles">' + tiles + "</div></section>" + gallery(regionPhotos(r));
+    startGallery();
   }
 
   function renderDistrict(ri, di) {
     var r = T.regions[ri], d = r.districts[di];
     var st = status(d);
     header(r.name, d.name, d.date ? fmtDate(d.date) : null, { go: "region:" + ri, label: r.name });
+    if (!d.date && st === "done") $("date").textContent = "Ko'rsatilmagan";
 
     var text = {
       done: "Tanlov o'tkazilgan, bayonnoma topshirilgan",
       partial: "Faqat g'oliblar ro'yxati kelgan: sana va ishtirokchilar soni yo'q",
+      report: "Tanlov o'tkazilgan, ma'lumotnoma topshirilgan",
       none: "Tanlov bo'yicha ma'lumot kelmagan"
-    }[st];
+    }[st === "done" && !d.date ? "report" : st];
     $("status").innerHTML = '<span class="badge badge--' + st + '"><i class="dot dot--' + st + '"></i>' + text + "</span>" +
       (d.note ? '<span class="badge badge--note">' + esc(d.note) + "</span>" : "");
 
     var registered = d.participated != null ? d.participated + (d.absent || 0) : null;
     var rate = registered ? Math.round(d.participated / registered * 100) : null;
-    var ages = d.ages ? Object.keys(d.ages).map(function (k) { return d.ages[k]; }) : [];
+    var ages = winnerAges(d);
     var age = ages.length ? avg(ages).toFixed(1) : null;
     $("cards").innerHTML =
       card("Ro'yxatdan o'tgan", num(registered), "Ustoz AI sertifikati bilan", "blue") +
@@ -299,15 +431,17 @@
         var cls = "place place--" + (i + 1) + (x ? "" : " is-empty");
         var val, bar = 0;
         if (!x) val = "bo'sh";
-        else if (x.s != null) { val = x.s + "<small>/100</small>"; bar = x.s; }
+        else if (x.s != null) { val = x.s + "<small>/" + x.scale + "</small>"; bar = x.pct; }
         else if (x.a != null) { val = x.a + " yosh"; }
         else val = "ball yo'q";
         rows += '<li class="' + cls + '"><span class="medal">' + (i + 1) + '</span><span class="place__bar"><span style="width:' +
           bar + '%"></span></span><span class="place__val">' + val + "</span></li>";
       }
       var sent = p.length ? '<span class="chip chip--ok">1-o\'rin hududiy bosqichga</span>' : '<span class="chip">G\'olib yo\'q</span>';
+      var who = d.byMajor && d.byMajor[m.key] != null ?
+        '<div class="major__sub">Ishtirokchilar: <b>' + d.byMajor[m.key] + " nafar</b></div>" : "";
       return '<div class="major major--' + m.key + '"><div class="major__head"><div class="major__name">' + m.name +
-        '</div><div class="major__count">' + p.length + "/" + slots + "</div></div>" +
+        '</div><div class="major__count">' + p.length + "/" + slots + "</div></div>" + who +
         '<ol class="places">' + rows + "</ol>" + sent + "</div>";
     }).join("");
 
@@ -323,10 +457,13 @@
       (d.ages ? '<span class="muted"> — 1-o\'rin g\'olibining yoshi</span>' : '<span class="muted"> — 1-, 2-, 3-o\'rin ballari</span>') +
       '</h2><div class="majors">' + majors + "</div></section>" +
       '<section class="panel"><h2 class="panel__title">Jarayon darajasi</h2><div class="progress">' + ring(level(d)) +
-      '<ol class="steps">' + steps + "</ol></div></section>";
+      '<ol class="steps">' + steps + "</ol></div></section>" +
+      gallery((d.photos || []).map(function (ph) { return { src: ph.src, caption: ph.caption, place: d.name }; }), d.links);
+    startGallery();
   }
 
   function render() {
+    stopGallery();
     if (view.type === "district") renderDistrict(view.r, view.d);
     else if (view.type === "region") renderRegion(view.r);
     else renderAll();

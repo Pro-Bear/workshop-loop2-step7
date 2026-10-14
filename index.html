@@ -14,27 +14,26 @@
       <div class="brand">
         <div class="brand__logo">ZK</div>
         <div>
-          <div class="brand__title">Zamonaviy kasblar</div>
-          <div class="brand__sub">Hududlar monitoringi</div>
+          <div class="brand__title" id="brand-title"></div>
+          <div class="brand__sub" id="brand-sub"></div>
         </div>
       </div>
-      <nav class="regions" id="regions" aria-label="Viloyatlar"></nav>
-      <div class="legend">
-        <span><i class="dot dot--done"></i>O'tkazildi</span>
-        <span><i class="dot dot--partial"></i>Faqat g'oliblar ro'yxati</span>
-        <span><i class="dot dot--none"></i>Ma'lumot yo'q</span>
-      </div>
+      <nav class="regions" id="regions"></nav>
+      <div class="legend" id="legend"></div>
     </aside>
 
     <main class="main">
-      <div id="back"></div>
+      <div class="toprow">
+        <div id="back"></div>
+        <div class="langs" id="langs" role="group" aria-label="Til / Язык / Language"></div>
+      </div>
       <header class="topbar">
         <div class="topbar__text">
           <div class="topbar__crumb" id="crumb"></div>
           <h1 class="topbar__title" id="title"></h1>
         </div>
         <div class="datebox">
-          <div class="datebox__label">Tanlov sanasi</div>
+          <div class="datebox__label" id="date-label"></div>
           <div class="datebox__value" id="date"></div>
         </div>
       </header>
@@ -46,7 +45,9 @@
       <footer class="foot" id="foot"></footer>
     </main>
   </div>
+  <div class="tip" id="tip" role="tooltip" hidden></div>
 
+  <script src="./i18n.js"></script>
   <script src="./data.js"></script>
   <script src="./app.js"></script>
 </body>

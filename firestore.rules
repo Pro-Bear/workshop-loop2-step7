@@ -1,12 +1,17 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Hamma ko'ra oladi, faqat admin(lar) yoza oladi.
-    // ADMIN_EMAIL ni o'zingizning admin pochtangizga almashtiring.
+
+    // Tanlov natijalari: hamma ko'ra oladi, faqat admin o'zgartira oladi.
     match /districts/{docId} {
       allow read: if true;
       allow write: if request.auth != null
-                   && request.auth.token.email in ["ADMIN_EMAIL"];
+                   && request.auth.token.email == "zamonk26@gmail.com";
+    }
+
+    // Boshqa barcha ma'lumotlar yopiq.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

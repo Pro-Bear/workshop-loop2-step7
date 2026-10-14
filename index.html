@@ -1,14 +1,54 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uz">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>Loop 2 - Step 7</title>
+  <title>Zamonaviy kasblar — monitoring</title>
   <link href="https://fonts.googleapis.com/css?family=Roboto:100,400,500,700" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand__logo">ZK</div>
+        <div>
+          <div class="brand__title">Zamonaviy kasblar</div>
+          <div class="brand__sub">Hududlar monitoringi</div>
+        </div>
+      </div>
+      <input class="search" id="search" type="search" placeholder="Hududni qidirish…" autocomplete="off">
+      <nav class="regions" id="regions" aria-label="Hududlar"></nav>
+      <div class="legend">
+        <span><i class="dot dot--done"></i>O'tkazildi</span>
+        <span><i class="dot dot--partial"></i>Faqat g'oliblar ro'yxati</span>
+        <span><i class="dot dot--none"></i>Ma'lumot yo'q</span>
+      </div>
+    </aside>
 
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <div class="topbar__crumb" id="crumb"></div>
+          <h1 class="topbar__title" id="title"></h1>
+        </div>
+        <div class="datebox">
+          <div class="datebox__label">Tanlov sanasi</div>
+          <div class="datebox__value" id="date"></div>
+        </div>
+      </header>
+
+      <section class="status" id="status"></section>
+      <section class="cards" id="cards"></section>
+      <section class="panel" id="progress"></section>
+      <section class="panel" id="breakdown"></section>
+
+      <footer class="foot" id="foot"></footer>
+    </main>
+  </div>
+
+  <script src="./data.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>

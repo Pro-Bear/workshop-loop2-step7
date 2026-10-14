@@ -2,6 +2,137 @@
   var T = window.TOURNAMENT, L = window.I18N;
   var MAJORS = T.majors;
   var GAL_DELAY = 3000;
+  var FB_VER = "10.12.2";
+
+  // ---------- ma'lumotlar qatlami: asl ma'lumot + admin o'zgarishlari ----------
+
+  var BASE = JSON.parse(JSON.stringify(T.regions));
+  var store = { mode: "local", overrides: {}, db: null, auth: null, user: null };
+
+  function docId(regionKey, name) {
+    return regionKey + "__" + name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+
+  function applyOverrides() {
+    var regions = JSON.parse(JSON.stringify(BASE));
+    Object.keys(store.overrides).forEach(function (id) {
+      var o = store.overrides[id];
+      var r = regions.filter(function (x) { return x.key === o.region; })[0];
+      if (!r || !o.name) return;
+      r.districts = r.districts || [];
+      var d = r.districts.filter(function (x) { return x.name === o.name; })[0];
+      if (!d) { d = { name: o.name }; r.districts.push(d); }
+      var baseVenue = d.venue;
+      ["date", "held", "scheduled", "venue", "participated", "absent", "firsts", "byMajor", "scale", "web", "gd", "mob", "notes"]
+        .forEach(function (k) { delete d[k]; });
+      if (o.status === "scheduled") {
+        d.scheduled = o.date || "tbd";
+        d.venue = o.venue || baseVenue;
+      } else {
+        if (o.date) d.date = o.date; else d.held = true;
+        if (o.participated != null) d.participated = o.participated;
+        if (o.absent != null) d.absent = o.absent;
+        var by = {};
+        MAJORS.forEach(function (k) {
+          var m = (o.majors || {})[k] || {};
+          var w = Math.max(0, Math.min(3, m.winners || 0));
+          var sc = (m.scores || []).slice(0, w);
+          while (sc.length < w) sc.push(null);
+          d[k] = sc;
+          if (m.people != null) by[k] = m.people;
+        });
+        if (Object.keys(by).length) d.byMajor = by;
+      }
+      d.edited = true;
+    });
+    T.regions = regions;
+  }
+
+  function loadLocal() {
+    try { store.overrides = JSON.parse(localStorage.getItem("zk-overrides") || "{}") || {}; } catch (e) { store.overrides = {}; }
+  }
+  function saveLocal() {
+    try { localStorage.setItem("zk-overrides", JSON.stringify(store.overrides)); } catch (e) {}
+  }
+
+  function fbConfigured() {
+    var c = window.FIREBASE_CONFIG;
+    return !!(c && c.apiKey && c.projectId);
+  }
+
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var el = document.createElement("script");
+      el.src = src; el.onload = res; el.onerror = rej;
+      document.head.appendChild(el);
+    });
+  }
+
+  function setOverridesFromSnap(snap) {
+    var o = {};
+    snap.forEach(function (doc) { o[doc.id] = doc.data(); });
+    store.overrides = o;
+  }
+
+  function initFirebase() {
+    if (!fbConfigured()) return;
+    var base = "https://www.gstatic.com/firebasejs/" + FB_VER + "/";
+    loadScript(base + "firebase-app-compat.js")
+      .then(function () { return Promise.all([loadScript(base + "firebase-auth-compat.js"), loadScript(base + "firebase-firestore-compat.js")]); })
+      .then(function () {
+        firebase.initializeApp(window.FIREBASE_CONFIG);
+        store.mode = "firebase";
+        store.db = firebase.firestore();
+        store.auth = firebase.auth();
+        store.auth.onAuthStateChanged(function (u) { store.user = u; if (!$("admin").hidden) renderAdmin(); });
+        store.db.collection("districts").onSnapshot(function (snap) {
+          setOverridesFromSnap(snap);
+          applyOverrides();
+          render(false);
+        }, function (err) { console.warn("Firestore:", err); });
+        renderTools();
+      })
+      .catch(function (e) { console.warn("Firebase:", e); store.mode = "local"; });
+  }
+
+  function fetchData() {
+    if (store.mode === "firebase") return store.db.collection("districts").get().then(setOverridesFromSnap);
+    loadLocal();
+    return Promise.resolve();
+  }
+
+  function saveOverride(id, doc) {
+    if (store.mode === "firebase") {
+      doc.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      doc.updatedBy = store.user ? store.user.email : null;
+      return store.db.collection("districts").doc(id).set(doc);
+    }
+    doc.updatedAt = new Date().toISOString();
+    store.overrides[id] = doc;
+    saveLocal();
+    return Promise.resolve();
+  }
+
+  function removeOverride(id) {
+    if (store.mode === "firebase") return store.db.collection("districts").doc(id).delete();
+    delete store.overrides[id];
+    saveLocal();
+    return Promise.resolve();
+  }
+
+  // ---------- kunduzgi / tungi rejim ----------
+
+  var theme = null;
+  try { theme = localStorage.getItem("zk-theme"); } catch (e) {}
+  function isDark() {
+    if (theme) return theme === "dark";
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  function applyTheme() {
+    if (theme) document.documentElement.setAttribute("data-theme", theme);
+    else document.documentElement.removeAttribute("data-theme");
+  }
+  applyTheme();
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -117,6 +248,7 @@
     }
     if (d.date && d.participated == null) out.push(t("n_noCount"));
     if (d.held && !d.date) out.push(t("n_noDate"));
+    if (d.edited) out.push(t("a_edited"));
     return out;
   }
 
@@ -180,6 +312,10 @@
     away: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="8" r="3.5"/><path d="M3.5 20a6.5 6.5 0 0 1 11-4.7M16 16l5 5M21 16l-5 5"/></svg>',
     trophy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0V4zM8 6H4.5a3 3 0 0 0 3.5 4M16 6h3.5a3 3 0 0 1-3.5 4M12 13v4M8.5 20h7M10 17h4v3h-4z"/></svg>',
     close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.5-4.6L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.6L20 16M20 20v-4h-4"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
+    moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg>',
     cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>'
   };
 
@@ -189,7 +325,7 @@
 
   function go(v, scrollTo) {
     view = v;
-    render();
+    render(true);
     var target = scrollTo && $(scrollTo);
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (window.innerWidth < 860) $("title").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -208,7 +344,27 @@
     if (l) {
       lang = l.dataset.lang;
       try { localStorage.setItem("zk-lang", lang); } catch (err) {}
-      render();
+      render(false);
+      if (!$("admin").hidden) renderAdmin();
+      return;
+    }
+    var act = e.target.closest("[data-act]");
+    if (!act) return;
+    if (act.dataset.act === "theme") {
+      theme = isDark() ? "light" : "dark";
+      try { localStorage.setItem("zk-theme", theme); } catch (err) {}
+      document.documentElement.classList.add("theme-anim");
+      applyTheme();
+      setTimeout(function () { document.documentElement.classList.remove("theme-anim"); }, 450);
+      renderTools();
+    } else if (act.dataset.act === "refresh") {
+      act.classList.add("is-spinning");
+      fetchData().then(function () {
+        applyOverrides();
+        render(true);
+        toast(t("refreshed"));
+      }).catch(function (err) { toast(String(err && err.message || err), true); })
+        .then(function () { setTimeout(function () { var b = document.querySelector("[data-act=refresh]"); if (b) b.classList.remove("is-spinning"); }, 600); });
     }
   });
 
@@ -457,10 +613,7 @@
     $("brand-title").textContent = t("brandTitle");
     $("brand-sub").textContent = t("brandSub");
     $("date-label").textContent = t("dateLabel");
-    $("langs").innerHTML = L.langs.map(function (l) {
-      return '<button class="btn3d lang' + (l === lang ? " is-active" : "") + '" data-lang="' + l + '" aria-pressed="' + (l === lang) + '">' +
-        l.toUpperCase() + "</button>";
-    }).join("");
+    renderTools();
     document.documentElement.lang = lang;
   }
 
@@ -487,16 +640,15 @@
 
     var regionRows = T.regions.map(function (r, ri) {
       var g = r.districts ? aggregate(r.districts) : null;
-      var total = g ? g.total : 0;
-      var segs = !g ? '<span class="sbar__seg sbar__seg--empty" style="width:100%"></span>' :
-        ["done", "scheduled", "none"].map(function (s) {
-          return g[s] ? '<span class="sbar__seg sbar__seg--' + s + '" style="width:' + (g[s] / total * 100) + '%">' + (g[s] / total > 0.12 ? g[s] : "") + "</span>" : "";
-        }).join("");
-      var tipTxt = "<b>" + esc(regionName(r)) + "</b>" + (g ? "<br>" + esc(t("st_done")) + ": " + g.done + "<br>" + esc(t("st_scheduled")) + ": " +
-        g.scheduled + "<br>" + esc(t("st_none")) + ": " + g.none : "<br>" + esc(t("noData")));
-      return '<div class="sbar" data-go="region:' + ri + '" tabindex="0" role="button" data-tip="' + tipTxt + '">' +
-        '<span class="sbar__label">' + esc(regionName(r)) + '</span><span class="sbar__track">' + segs + "</span>" +
-        '<span class="sbar__val">' + (g ? g.done + "/" + total : "—") + "</span></div>";
+      var total = g ? g.total : 0, done = g ? g.done : 0;
+      var state = done === 0 ? "none" : done === total ? "full" : "partial";
+      var pct = total ? Math.round(done / total * 100) : 0;
+      var tipTxt = "<b>" + esc(regionName(r)) + "</b><br>" + esc(t("rs_" + state)) +
+        (g ? "<br>" + esc(t("st_done")) + ": " + done + " / " + total + (g.scheduled ? "<br>" + esc(t("st_scheduled")) + ": " + g.scheduled : "") : "");
+      return '<div class="sbar sbar--' + state + '" data-go="region:' + ri + '" tabindex="0" role="button" data-tip="' + tipTxt + '">' +
+        '<span class="sbar__label">' + esc(regionName(r)) + '</span><span class="sbar__track">' +
+        '<span class="sbar__fill" style="width:' + (state === "none" ? 100 : pct) + '%">' + (state === "none" ? "" : pct + "%") + "</span></span>" +
+        '<span class="sbar__val">' + (g ? done + "/" + total : "0") + "</span></div>";
     }).join("");
 
     var attendance = attendanceBars(T.regions.filter(function (r) { return r.districts; }).map(function (r) {
@@ -509,7 +661,7 @@
       '<div class="grid-2"><section class="panel"><div class="panel__head"><h2 class="panel__title">' + t("ch_status") +
       '</h2><span class="muted">' + t("ch_statusNote", a.total) + "</span></div>" + donut(a) + "</section>" + attendance + "</div>" +
       '<section class="panel"><div class="panel__head"><h2 class="panel__title">' + t("ch_byRegion") + '</h2><ul class="keys">' +
-      ["done", "scheduled", "none"].map(function (s) { return '<li><i class="sw sw--' + s + '"></i>' + t("st_" + s) + "</li>"; }).join("") +
+      ["full", "partial", "none"].map(function (k) { return '<li><i class="sw sw--rs-' + k + '"></i>' + t("rs_" + k) + "</li>"; }).join("") +
       '</ul></div><div class="sbars">' + regionRows + "</div></section>" +
       majorsPanel(all) +
       upcomingPanel(T.regions) +
@@ -670,13 +822,280 @@
       gallery(photosOf(r, [d]), d.links).replace('<section class="panel">', '<section class="detail__gallery">');
   }
 
-  function render() {
+  function render(animate) {
+    if (view.type === "region" && T.regions[view.r].districts && view.d != null && !T.regions[view.r].districts[view.d]) view.d = null;
     if (view.type === "region") renderRegion(view.r, view.d);
     else renderAll();
     renderSidebar();
     $("foot").textContent = t("foot", fmtDate(T.asOf));
     startGallery();
+    if (animate) playEntrance();
   }
 
-  render();
+  // ---------- jonli effektlar ----------
+
+  function playEntrance() {
+    if (reduceMotion) return;
+    var main = document.querySelector(".main");
+    main.classList.remove("is-entering");
+    void main.offsetWidth;
+    main.querySelectorAll(".card, .panel, .badge").forEach(function (el, i) { el.style.setProperty("--i", Math.min(i, 14)); });
+    main.classList.add("is-entering");
+    countUp(main);
+  }
+
+  function countUp(root) {
+    root.querySelectorAll(".card__value, .major__stats dd, .mini-card b, .legend-list b, .donut__num").forEach(function (el) {
+      var node = el.firstChild;
+      if (!node || node.nodeType !== 3) return;
+      var raw = node.nodeValue.trim();
+      var m = raw.match(/^([\d,]+)(.*)$/);
+      if (!m) return;
+      var target = +m[1].replace(/,/g, ""), rest = m[2];
+      if (!target) return;
+      var start = performance.now(), dur = 900;
+      (function tick(now) {
+        var k = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - k, 3);
+        node.nodeValue = num(Math.round(target * e)) + rest;
+        if (k < 1) requestAnimationFrame(tick);
+      })(start);
+    });
+  }
+
+  function toast(msg, isError) {
+    var el = $("toast");
+    el.textContent = msg;
+    el.classList.toggle("is-error", !!isError);
+    el.hidden = false;
+    el.classList.remove("is-shown");
+    void el.offsetWidth;
+    el.classList.add("is-shown");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { el.classList.remove("is-shown"); setTimeout(function () { el.hidden = true; }, 300); }, 2600);
+  }
+
+  function renderTools() {
+    var dark = isDark();
+    $("tools").innerHTML =
+      (store.mode === "firebase" ? '<span class="live"><i></i>' + t("live") + "</span>" : "") +
+      '<button class="btn3d tool" data-act="refresh" title="' + esc(t("refresh")) + '">' + ICON.refresh + "<span>" + t("refresh") + "</span></button>" +
+      '<button class="btn3d tool" data-act="theme" aria-pressed="' + dark + '" title="' + esc(dark ? t("themeDay") : t("themeNight")) + '">' +
+      (dark ? ICON.sun : ICON.moon) + "<span>" + (dark ? t("themeDay") : t("themeNight")) + "</span></button>";
+    $("langs").innerHTML = L.langs.map(function (l) {
+      return '<button class="btn3d lang' + (l === lang ? " is-active" : "") + '" data-lang="' + l + '" aria-pressed="' + (l === lang) + '">' +
+        l.toUpperCase() + "</button>";
+    }).join("");
+  }
+
+  if (window.matchMedia) {
+    var mq = window.matchMedia("(prefers-color-scheme: dark)");
+    if (mq.addEventListener) mq.addEventListener("change", function () { if (!theme) renderTools(); });
+  }
+
+  // ---------- logotip: 5 marta bosilsa admin panel ----------
+
+  var taps = [];
+  $("logo").addEventListener("click", function () {
+    var now = Date.now();
+    taps = taps.filter(function (x) { return now - x < 2500; });
+    taps.push(now);
+    var logo = $("logo");
+    logo.classList.remove("is-tapped");
+    void logo.offsetWidth;
+    logo.classList.add("is-tapped");
+    if (taps.length >= 5) { taps = []; openAdmin(); }
+  });
+
+  // ---------- admin panel ----------
+
+  var adm = { r: null, d: null };
+
+  function openAdmin() {
+    if (adm.r == null) {
+      adm.r = view.type === "region" ? view.r : T.regions.map(function (r) { return !!r.districts; }).indexOf(true);
+      adm.d = view.type === "region" && view.d != null ? view.d : null;
+    }
+    $("admin").hidden = false;
+    document.body.classList.add("modal-open");
+    renderAdmin();
+  }
+
+  function closeAdmin() {
+    $("admin").hidden = true;
+    document.body.classList.remove("modal-open");
+  }
+
+  $("admin").addEventListener("click", function (e) {
+    if (e.target === $("admin") || e.target.closest("[data-adm=close]")) closeAdmin();
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("admin").hidden) closeAdmin(); });
+
+  function field(id, label, input, hint) {
+    return '<label class="fld" for="' + id + '"><span class="fld__label">' + label + (hint ? ' <em>' + hint + "</em>" : "") + "</span>" + input + "</label>";
+  }
+
+  function numInput(id, val, max) {
+    return '<input class="inp" id="' + id + '" type="number" inputmode="numeric" min="0"' + (max ? ' max="' + max + '"' : "") +
+      ' step="1" value="' + (val == null ? "" : val) + '">';
+  }
+
+  function renderAdmin() {
+    var head = '<div class="adm__head"><div class="adm__brand"><span class="adm__lock">' + ICON.lock + '</span><h2 id="admin-title">' + t("a_title") +
+      '</h2></div><button class="btn3d detail__close" data-adm="close" aria-label="' + esc(t("a_cancel")) + '">' + ICON.close + "</button></div>";
+
+    if (store.mode === "firebase" && !store.user) {
+      $("admin-body").innerHTML = head + '<form class="adm__login" id="adm-login"><p class="muted">' + t("a_loginHint") + "</p>" +
+        field("adm-email", t("a_email"), '<input class="inp" id="adm-email" type="email" autocomplete="username" required>') +
+        field("adm-pass", t("a_password"), '<input class="inp" id="adm-pass" type="password" autocomplete="current-password" required>') +
+        '<p class="adm__err" id="adm-err" hidden></p><button class="btn3d btn-primary" type="submit">' + t("a_login") + "</button></form>";
+      $("adm-login").addEventListener("submit", function (e) {
+        e.preventDefault();
+        store.auth.signInWithEmailAndPassword($("adm-email").value.trim(), $("adm-pass").value).catch(function () {
+          $("adm-err").textContent = t("a_loginFail");
+          $("adm-err").hidden = false;
+        });
+      });
+      $("adm-email").focus();
+      return;
+    }
+
+    var info = store.mode === "firebase" ?
+      '<div class="adm__info adm__info--ok"><span>' + t("a_connected", esc(store.user.email)) + '</span><button class="btn3d btn-small" type="button" data-adm="logout">' +
+        t("a_logout") + "</button></div>" :
+      '<div class="adm__info">' + t("a_local") + "</div>";
+
+    var r = T.regions[adm.r];
+    var list = r.districts || [];
+    var regionOpts = T.regions.map(function (x, i) {
+      return '<option value="' + i + '"' + (i === adm.r ? " selected" : "") + ">" + esc(regionName(x)) + "</option>";
+    }).join("");
+    var distOpts = list.map(function (d, i) {
+      return '<option value="' + i + '"' + (i === adm.d ? " selected" : "") + ">" + esc(dName(d.name)) + "</option>";
+    }).join("") + '<option value="new"' + (adm.d === "new" || !list.length ? " selected" : "") + ">" + esc(t("a_newDistrict")) + "</option>";
+    if (!list.length) adm.d = "new";
+    if (adm.d == null) adm.d = list.length ? 0 : "new";
+
+    var d = adm.d === "new" ? { name: "" } : list[adm.d];
+    var st = adm.d === "new" ? "done" : status(d) === "scheduled" ? "scheduled" : "done";
+    var dateVal = d.date || (d.scheduled && d.scheduled !== "tbd" ? d.scheduled : "");
+
+    var majors = MAJORS.map(function (k) {
+      var p = adm.d === "new" ? [] : places(d, k);
+      var w = p.length;
+      var scores = [0, 1, 2].map(function (i) {
+        var v = p[i] && p[i].pct != null ? Math.round(p[i].pct) : "";
+        return '<label class="fld" id="adm-' + k + "-l" + i + '"' + (i >= w ? " hidden" : "") + '><span class="fld__label">' + esc(t("a_score", i + 1)) +
+          '</span><input class="inp inp--score" id="adm-' + k + "-s" + i + '" type="number" min="0" max="100" step="1" value="' + v + '" placeholder="0–100"></label>';
+      }).join("");
+      var people = d.byMajor && d.byMajor[k] != null ? d.byMajor[k] : "";
+      return '<fieldset class="adm__major major--' + k + '"><legend><span class="major__icon">' + ICON[k] + "</span>" + t("m_" + k) + "</legend>" +
+        '<div class="adm__row">' + field("adm-" + k + "-people", t("a_people"), numInput("adm-" + k + "-people", people), t("a_optional")) +
+        field("adm-" + k + "-w", t("a_winners"), '<select class="inp" id="adm-' + k + '-w" data-major="' + k + '">' +
+          [0, 1, 2, 3].map(function (n) { return '<option value="' + n + '"' + (n === w ? " selected" : "") + ">" + n + "</option>"; }).join("") + "</select>") +
+        "</div>" + '<div class="adm__scores">' + scores + "</div></fieldset>";
+    }).join("");
+
+    var hasOverride = adm.d !== "new" && store.overrides[docId(r.key, d.name)];
+
+    $("admin-body").innerHTML = head + info +
+      '<form class="adm__form" id="adm-form" novalidate>' +
+      '<div class="adm__row">' + field("adm-region", t("a_region"), '<select class="inp" id="adm-region">' + regionOpts + "</select>") +
+      field("adm-district", t("a_district"), '<select class="inp" id="adm-district">' + distOpts + "</select>") + "</div>" +
+      (adm.d === "new" ? field("adm-name", t("a_newName"), '<input class="inp" id="adm-name" type="text" placeholder="' + esc(t("a_newNamePh")) + '">') : "") +
+      '<div class="adm__row">' + field("adm-status", t("a_status"), '<select class="inp" id="adm-status"><option value="done"' + (st === "done" ? " selected" : "") + ">" +
+        t("st_done") + '</option><option value="scheduled"' + (st === "scheduled" ? " selected" : "") + ">" + t("st_scheduled") + "</option></select>") +
+      field("adm-date", t("a_date"), '<input class="inp" id="adm-date" type="date" value="' + dateVal + '">') + "</div>" +
+      '<div class="adm__sched"' + (st === "scheduled" ? "" : " hidden") + ">" +
+        field("adm-venue", t("a_venue"), '<input class="inp" id="adm-venue" type="text" value="' + esc(d.venue || "") + '">') + "</div>" +
+      '<div class="adm__done"' + (st === "done" ? "" : " hidden") + ">" +
+        '<div class="adm__row">' + field("adm-part", t("a_participated"), numInput("adm-part", d.participated)) +
+        field("adm-abs", t("a_absent"), numInput("adm-abs", d.absent)) + "</div>" + majors + "</div>" +
+      '<p class="adm__err" id="adm-err" hidden></p>' +
+      '<div class="adm__actions">' + (hasOverride ? '<button class="btn3d btn-small" type="button" data-adm="reset">' + t("a_reset") + "</button>" : "<span></span>") +
+      '<div class="adm__actions-right"><button class="btn3d btn-small" type="button" data-adm="close">' + t("a_cancel") + "</button>" +
+      '<button class="btn3d btn-primary" type="submit">' + t("a_save") + "</button></div></div></form>";
+
+    $("adm-region").addEventListener("change", function () { adm.r = +this.value; adm.d = null; renderAdmin(); });
+    $("adm-district").addEventListener("change", function () { adm.d = this.value === "new" ? "new" : +this.value; renderAdmin(); });
+    $("adm-status").addEventListener("change", function () {
+      document.querySelector(".adm__sched").hidden = this.value !== "scheduled";
+      document.querySelector(".adm__done").hidden = this.value !== "done";
+    });
+    document.querySelectorAll("[data-major]").forEach(function (sel) {
+      sel.addEventListener("change", function () {
+        for (var i = 0; i < 3; i++) $("adm-" + sel.dataset.major + "-l" + i).hidden = i >= +sel.value;
+      });
+    });
+    $("adm-form").addEventListener("submit", submitAdmin);
+    var lo = document.querySelector("[data-adm=logout]");
+    if (lo) lo.addEventListener("click", function () { store.auth.signOut(); });
+    var rs = document.querySelector("[data-adm=reset]");
+    if (rs) rs.addEventListener("click", function () {
+      var name = d.name;
+      removeOverride(docId(r.key, name)).then(function () {
+        if (store.mode === "local") { applyOverrides(); render(true); }
+        toast(t("a_resetDone", dName(name)));
+        adm.d = null;
+        renderAdmin();
+      }).catch(function (err) { showErr(t("a_saveFail", err.message || err)); });
+    });
+  }
+
+  function showErr(msg) {
+    $("adm-err").textContent = msg;
+    $("adm-err").hidden = false;
+  }
+
+  function readInt(id, max) {
+    var v = $(id).value.trim();
+    if (v === "") return null;
+    var n = Number(v);
+    if (!Number.isInteger(n) || n < 0 || (max != null && n > max)) throw new Error("bad");
+    return n;
+  }
+
+  function submitAdmin(e) {
+    e.preventDefault();
+    var r = T.regions[adm.r];
+    var name = adm.d === "new" ? $("adm-name").value.trim().replace(/\s+/g, " ") : r.districts[adm.d].name;
+    if (!name) return showErr(t("a_needName"));
+    var doc = { region: r.key, name: name, status: $("adm-status").value, date: $("adm-date").value || null };
+    try {
+      if (doc.status === "scheduled") {
+        doc.venue = $("adm-venue").value.trim() || null;
+      } else {
+        doc.participated = readInt("adm-part");
+        doc.absent = readInt("adm-abs");
+        doc.majors = {};
+        MAJORS.forEach(function (k) {
+          var w = +$("adm-" + k + "-w").value;
+          var scores = [];
+          for (var i = 0; i < w; i++) scores.push(readInt("adm-" + k + "-s" + i, 100));
+          doc.majors[k] = { people: readInt("adm-" + k + "-people"), winners: w, scores: scores };
+        });
+      }
+    } catch (err) {
+      return showErr(t("a_badNumber"));
+    }
+    var btn = e.submitter || document.querySelector("#adm-form [type=submit]");
+    btn.disabled = true;
+    saveOverride(docId(r.key, name), doc).then(function () {
+      if (store.mode === "local") applyOverrides();
+      var di = T.regions[adm.r].districts.map(function (x) { return x.name; }).indexOf(name);
+      adm.d = di;
+      toast(t("a_saved", dName(name)));
+      closeAdmin();
+      go({ type: "region", r: adm.r, d: di });
+    }).catch(function (err) {
+      btn.disabled = false;
+      showErr(t("a_saveFail", err && err.message || err));
+    });
+  }
+
+  // ---------- ishga tushirish ----------
+
+  if (!fbConfigured()) loadLocal();
+  applyOverrides();
+  render(true);
+  initFirebase();
 })();

@@ -124,6 +124,11 @@ svg { flex: none; }
 .tool svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tool.is-spinning svg { animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.updated { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.updated b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+.updated svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+@media (max-width: 1180px) { .updated__label { display: none; } }
+@media (max-width: 420px) { .updated { flex-basis: 100%; } }
 .live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--ok-fg); }
 .live i { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--s-done); }
 .live i::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--s-done); animation: pulse 2s ease-out infinite; will-change: transform, opacity; }
@@ -655,7 +660,8 @@ body::before {
 
 .is-entering .cards, .is-entering .main-body > *, .is-entering .status { animation: rise .35s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(var(--i, 0) * 40ms); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
-.theme-anim body, .theme-anim .sidebar, .theme-anim .panel, .theme-anim .card, .theme-anim .topbar { transition: background-color .3s ease, color .3s ease !important; }
+/* bo'limlar ekrandan tashqarida bo'lsa, brauzer ularni chizmaydi */
+.main-body > section { content-visibility: auto; contain-intrinsic-size: auto 480px; }
 
 /* xabar (toast) */
 .toast {

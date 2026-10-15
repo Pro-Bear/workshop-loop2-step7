@@ -353,9 +353,7 @@
     if (act.dataset.act === "theme") {
       theme = isDark() ? "light" : "dark";
       try { localStorage.setItem("zk-theme", theme); } catch (err) {}
-      document.documentElement.classList.add("theme-anim");
       applyTheme();
-      setTimeout(function () { document.documentElement.classList.remove("theme-anim"); }, 450);
       renderTools();
     } else if (act.dataset.act === "refresh") {
       act.classList.add("is-spinning");
@@ -906,10 +904,31 @@
     toast.timer = setTimeout(function () { el.classList.remove("is-shown"); setTimeout(function () { el.hidden = true; }, 300); }, 2600);
   }
 
+  function lastUpdateDate() {
+    var best = null;
+    Object.keys(store.overrides).forEach(function (id) {
+      var u = store.overrides[id].updatedAt, d = null;
+      if (!u) return;
+      if (typeof u.toDate === "function") d = u.toDate();
+      else if (typeof u === "string") d = new Date(u);
+      else if (u.seconds) d = new Date(u.seconds * 1000);
+      if (d && !isNaN(d) && (!best || d > best)) best = d;
+    });
+    return best;
+  }
+
+  function fmtDateTime(d) {
+    var iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    return fmtDate(iso) + ", " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+
   function renderTools() {
     var dark = isDark();
+    var last = lastUpdateDate();
+    var when = last ? fmtDateTime(last) : fmtDate(T.asOf);
     $("tools").innerHTML =
-      (store.mode === "firebase" ? '<span class="live"><i></i>' + t("live") + "</span>" : "") +
+      '<span class="updated" title="' + esc(t("lastUpdate") + ": " + when) + '">' + ICON.scheduled +
+      '<span class="updated__label">' + t("lastUpdate") + ':</span> <b>' + esc(when) + "</b></span>" +
       '<button class="btn3d tool" data-act="refresh" title="' + esc(t("refresh")) + '">' + ICON.refresh + "<span>" + t("refresh") + "</span></button>" +
       '<button class="btn3d tool" data-act="theme" aria-pressed="' + dark + '" title="' + esc(dark ? t("themeDay") : t("themeNight")) + '">' +
       (dark ? ICON.sun : ICON.moon) + "<span>" + (dark ? t("themeDay") : t("themeNight")) + "</span></button>";

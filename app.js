@@ -374,19 +374,28 @@
 
   // tooltip
   var tip = $("tip");
+  var tipEl = null;
   document.addEventListener("mouseover", function (e) {
     var el = e.target.closest("[data-tip]");
+    if (el === tipEl) return;
+    tipEl = el;
     if (!el) { tip.hidden = true; return; }
     tip.innerHTML = el.dataset.tip;
     tip.hidden = false;
   });
+  var tipPos = null, tipFrame = 0;
   document.addEventListener("mousemove", function (e) {
     if (tip.hidden) return;
-    var x = e.clientX + 14, y = e.clientY + 14, w = tip.offsetWidth, h = tip.offsetHeight;
-    if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
-    if (y + h > window.innerHeight - 8) y = e.clientY - h - 14;
-    tip.style.transform = "translate(" + x + "px," + y + "px)";
-  });
+    tipPos = { x: e.clientX, y: e.clientY };
+    if (tipFrame) return;
+    tipFrame = requestAnimationFrame(function () {
+      tipFrame = 0;
+      var x = tipPos.x + 14, y = tipPos.y + 14, w = tip.offsetWidth, h = tip.offsetHeight;
+      if (x + w > window.innerWidth - 8) x = tipPos.x - w - 14;
+      if (y + h > window.innerHeight - 8) y = tipPos.y - h - 14;
+      tip.style.transform = "translate(" + x + "px," + y + "px)";
+    });
+  }, { passive: true });
 
   // ---------- umumiy bo'laklar ----------
 
@@ -484,7 +493,7 @@
       var tipTxt = "<b>" + esc(r.label) + "</b><br>" + esc(t("ch_attended")) + ": " + num(r.a) + "<br>" + esc(t("ch_absent")) + ": " + num(r.b);
       return '<div class="hbar"' + (r.go ? ' data-go="' + r.go + '" tabindex="0" role="button"' : "") + ' data-tip="' + tipTxt + '">' +
         '<span class="hbar__label">' + esc(r.label) + '</span><span class="hbar__track">' +
-        '<span class="hbar__seg hbar__seg--a" style="width:' + (r.a / max * 100) + '%"></span>' +
+        '<span class="hbar__seg hbar__seg--a' + (r.b ? " is-joined" : "") + '" style="width:' + (r.a / max * 100) + '%"></span>' +
         (r.b ? '<span class="hbar__seg hbar__seg--b" style="width:' + (r.b / max * 100) + '%"></span>' : "") +
         '</span><span class="hbar__val">' + num(r.a) + "</span></div>";
     }).join("");
@@ -521,7 +530,7 @@
       var place = regionName(p.region) + " · " + dName(p.d.name);
       return '<figure class="gallery__slide">' +
         '<span class="gallery__backdrop" style="background-image:url(\'' + esc(p.src) + '\')"></span>' +
-        '<img src="' + esc(p.src) + '" alt="' + esc(place + ": " + t("c_" + p.cap)) + '"' + (i > 1 ? ' loading="lazy"' : "") +
+        '<img src="' + esc(p.src) + '" alt="' + esc(place + ": " + t("c_" + p.cap)) + '"' + (i > 1 ? ' loading="lazy"' : "") + ' decoding="async"' +
         ' onload="this.parentNode.classList.toggle(\'is-portrait\', this.naturalHeight > this.naturalWidth * 0.8)">' +
         '<div class="gallery__top"><span class="gallery__place">' + ICON.map + esc(place) + "</span></div>" +
         "<figcaption>" + esc(t("c_" + p.cap)) + "</figcaption></figure>";
@@ -552,16 +561,30 @@
     var bar = $("gal-bar");
     bar.classList.remove("is-running");
     void bar.offsetWidth;
-    if (!gal.paused && !reduceMotion && gal.n > 1) bar.classList.add("is-running");
+    var run = !gal.paused && !reduceMotion && gal.n > 1 && galVisible && !document.hidden;
+    if (run) bar.classList.add("is-running");
     clearTimeout(gal.timer);
-    if (!gal.paused && !reduceMotion && gal.n > 1) gal.timer = setTimeout(function () { showSlide(gal.i + 1); }, GAL_DELAY);
+    if (run) gal.timer = setTimeout(function () { showSlide(gal.i + 1); }, GAL_DELAY);
   }
+
+  var galObserver = null, galVisible = true;
 
   function startGallery() {
     var g = $("gallery");
     clearTimeout(gal.timer);
     gal.n = 0;
+    if (galObserver) { galObserver.disconnect(); galObserver = null; }
     if (!g) return;
+    if ("IntersectionObserver" in window) {
+      galVisible = false;
+      galObserver = new IntersectionObserver(function (entries) {
+        var v = entries[0].isIntersecting;
+        if (v === galVisible) return;
+        galVisible = v;
+        if (v && !gal.paused) showSlide(gal.i); else clearTimeout(gal.timer);
+      });
+      galObserver.observe(g);
+    }
     gal.n = g.querySelectorAll(".gallery__slide").length;
     gal.paused = false;
     showSlide(0);
@@ -845,13 +868,16 @@
     var main = document.querySelector(".main");
     main.classList.remove("is-entering");
     void main.offsetWidth;
-    main.querySelectorAll(".card, .panel, .badge").forEach(function (el, i) { el.style.setProperty("--i", Math.min(i, 14)); });
+    var parts = [main.querySelector(".status"), main.querySelector(".cards")].concat([].slice.call(main.querySelectorAll(".main-body > *")));
+    parts.forEach(function (el, i) { if (el) el.style.setProperty("--i", Math.min(i, 6)); });
+    clearTimeout(playEntrance.t);
+    playEntrance.t = setTimeout(function () { main.classList.remove("is-entering"); }, 900);
     main.classList.add("is-entering");
     countUp(main);
   }
 
   function countUp(root) {
-    root.querySelectorAll(".card__value, .major__stats dd, .mini-card b, .legend-list b, .donut__num").forEach(function (el) {
+    root.querySelectorAll(".card__value").forEach(function (el) {
       var node = el.firstChild;
       if (!node || node.nodeType !== 3) return;
       var raw = node.nodeValue.trim();
@@ -859,7 +885,7 @@
       if (!m) return;
       var target = +m[1].replace(/,/g, ""), rest = m[2];
       if (!target) return;
-      var start = performance.now(), dur = 900;
+      var start = performance.now(), dur = 600;
       (function tick(now) {
         var k = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - k, 3);
         node.nodeValue = num(Math.round(target * e)) + rest;
